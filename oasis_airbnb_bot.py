@@ -350,6 +350,45 @@ def bouw_weekbericht(vandaag: date | None = None) -> str:
     return "\n".join(regels)
 
 
+def bouw_fastlane(vandaag: date | None = None) -> str:
+    """Kort, overzichtelijk prijsoverzicht: nachten vrij + prijzen komende ~2 mnd."""
+    vandaag = vandaag or vandaag_lokaal()
+    st = load_state()
+    over = resterende_nachten(st)
+    gebruikt = gebruikte_nachten(st)
+    eind = vandaag + timedelta(weeks=HORIZON_WEKEN)
+
+    r = []
+    r.append("🏁 *Fast Lane — prijsoverzicht*")
+    r.append(f"🗓️ {vandaag:%d-%m-%Y}\n")
+    r.append(f"📊 *Nog {over} van {NACHTEN_QUOTA} nachten vrij* ({gebruikt} gebruikt).")
+    r.append(f"👉 Zet je Airbnb-beschikbaarheid op *{max(over, 0)} nachten*.")
+    r.append("")
+    r.append(f"💶 *Prijs per nacht (netto) — komende {HORIZON_WEKEN} weken:*")
+    r.append(f"• Doordeweeks *€{PRIJS_DOORDEWEEKS}* · weekend vr/za *€{PRIJS_WEEKEND}*")
+    if VAKANTIE_START <= eind and VAKANTIE_EIND >= vandaag:
+        r.append(f"• Vakantie {fmt_dag(VAKANTIE_START)}–{fmt_dag(VAKANTIE_EIND)}: "
+                 f"*€{PRIJS_VAKANTIE}* (je bent zelf weg)")
+
+    # Drukke periodes binnen de horizon, op datum (overzichtelijk gegroepeerd).
+    periodes = [p for p in komende_drukke_periodes(vandaag) if p["start"] <= eind]
+    periodes.sort(key=lambda p: p["start"])
+    if periodes:
+        r.append("")
+        r.append("⭐ *Drukke dagen — zet dan hoger:*")
+        for p in periodes:
+            per = (fmt_dag(p["start"]) if p["start"] == p["eind"]
+                   else f"{fmt_dag(p['start'])}–{fmt_dag(p['eind'])}")
+            r.append(f"• {per} — {p['label']}: €{p['prijs_dw']}/€{p['prijs_wk']} "
+                     f"(+{int(p['opslag']*100)}%)")
+    else:
+        r.append("")
+        r.append("Geen bijzondere drukte de komende 2 maanden — houd de standaardprijs aan.")
+
+    r.append("\n_Volledig advies? Stuur /advies._")
+    return "\n".join(r)
+
+
 # ============================================================
 #  TELEGRAM API
 # ============================================================
@@ -429,7 +468,8 @@ HELP_TEKST = (
     f"{REEDS_GEBOEKT})\n"
     "/prijs JJJJ-MM-DD — prijsadvies voor één specifieke datum\n"
     "/help — deze lijst\n\n"
-    "⚡ Snel: stuur gewoon *fastlane* → direct je prijsadvies.\n"
+    "⚡ Snel: stuur *fastlane* (hoofd/klein maakt niet uit) → kort overzicht: "
+    "nachten vrij + prijzen 2 maanden.\n"
     f"Het wekelijkse advies komt automatisch elke {VERSTUUR_DAG} om {VERSTUUR_TIJD}.\n"
     "_(In de cloud worden commando's elke ~5 min opgehaald.)_"
 )
@@ -616,13 +656,15 @@ def verwerk_update(update: dict, st: dict) -> None:
     chat_id = str(msg["chat"]["id"])
     tekst = msg["text"].strip()
     low = tekst.lower()
-    # Trefwoord: "fastlane" -> direct het prijsadvies (geen / nodig).
-    if "fastlane" in low or "fast lane" in low:
-        cmd_advies(st, chat_id, [])
+    # Trefwoord "fastlane": hoofd-/kleine letters, met/zonder spatie of streepje,
+    # en wat veelvoorkomende verschrijvingen -> kort prijsoverzicht (geen / nodig).
+    if any(k in low for k in ("fastlane", "fast lane", "fast-lane",
+                              "fastline", "fast line", "faslane")):
+        send_telegram(bouw_fastlane(), chat_id)
         return
     if not tekst.startswith("/"):
         send_telegram("Typ /help voor de commando's — of stuur *fastlane* "
-                      "voor direct je prijsadvies.", chat_id)
+                      "voor een kort prijsoverzicht.", chat_id)
         return
     delen = tekst.split()
     cmd = delen[0][1:].split("@")[0].lower()   # /boek@BotNaam -> boek
