@@ -1,0 +1,54 @@
+name: Commando's pollen
+
+on:
+  schedule:
+    # Elke 30 min de openstaande Telegram-commando's ophalen en verwerken.
+    # (Sub-uur cron wordt door GitHub "best effort" gedraaid; lichte vertraging
+    #  is normaal.) Kosten: ~48 runs/dag. Zie SETUP_CLOUD.md.
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}   # handmatige testknop (poll nu meteen)
+
+permissions:
+  contents: write
+
+concurrency:
+  group: airbnb-state
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Installeer dependencies
+        run: pip install -r requirements.txt
+
+      - name: Poll Telegram en verwerk commando's
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python oasis_airbnb_bot.py poll
+
+      - name: Commit bijgewerkte state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add airbnb_state.json
+          if git diff --cached --quiet; then
+            echo "Geen state-wijziging — niets te committen."
+            exit 0
+          fi
+          git commit -m "Update state (poll) [skip ci]"
+          for i in 1 2 3; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push; then
+              echo "State gepusht."; exit 0
+            fi
+            echo "Push poging $i mislukt, opnieuw..."; sleep 5
+          done
+          echo "Push definitief mislukt"; exit 1

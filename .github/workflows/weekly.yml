@@ -1,0 +1,57 @@
+name: Wekelijks prijsadvies
+
+on:
+  schedule:
+    # Cron is UTC. Doel: maandag 09:00 Amsterdam (CEST=UTC+2 zomer, CET=UTC+1 winter).
+    # Daarom 07:00 EN 08:00 UTC; het script stuurt pas vanaf 09:00 lokale tijd en
+    # maar 1x per ISO-week (DST-proof).
+    - cron: "0 7 * * 1"
+    - cron: "0 8 * * 1"
+  workflow_dispatch: {}   # handmatige testknop (stuurt altijd meteen)
+
+# Nodig om de bijgewerkte state terug te committen.
+permissions:
+  contents: write
+
+# Serialiseer alle schrijvers van airbnb_state.json (voorkomt push-races).
+concurrency:
+  group: airbnb-state
+  cancel-in-progress: false
+
+jobs:
+  weekly:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Installeer dependencies
+        run: pip install -r requirements.txt
+
+      - name: Stuur wekelijks advies
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python oasis_airbnb_bot.py weekly
+
+      - name: Commit bijgewerkte state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add airbnb_state.json
+          if git diff --cached --quiet; then
+            echo "Geen state-wijziging — niets te committen."
+            exit 0
+          fi
+          git commit -m "Update state (weekly) [skip ci]"
+          for i in 1 2 3; do
+            if git pull --rebase --autostash origin "${GITHUB_REF_NAME}" && git push; then
+              echo "State gepusht."; exit 0
+            fi
+            echo "Push poging $i mislukt, opnieuw..."; sleep 5
+          done
+          echo "Push definitief mislukt"; exit 1

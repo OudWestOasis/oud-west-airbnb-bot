@@ -1,0 +1,3 @@
+# Forceer LF (Unix) regeleindes in de repo, zodat de Linux-runner de
+# shell-scripts in de workflows correct uitvoert.
+* text=auto eol=lf

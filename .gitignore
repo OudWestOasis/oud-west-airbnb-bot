@@ -1,0 +1,12 @@
+# Geheimen - NOOIT committen
+.env
+
+# Logs en cache
+*.log
+__pycache__/
+*.pyc
+
+# Grote losse datafiles (lokale markttool)
+amsterdam_listings.csv.gz
+
+# LET OP: airbnb_state.json wordt JUIST WEL gecommit (de workflow werkt hem bij).
