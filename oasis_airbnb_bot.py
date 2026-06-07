@@ -368,14 +368,14 @@ def send_telegram(message: str, chat_id: str | None = None) -> bool:
                 timeout=20,
             )
             if resp.status_code == 403:
-                log.error("403 van Telegram: open de bot en druk op START "
-                          "(chat_id %s heeft de bot nog niet gestart).", chat_id)
+                log.error("403 van Telegram: de ontvanger heeft de bot nog niet "
+                          "gestart (open de bot en druk op START).")
                 return False
             resp.raise_for_status()
         except requests.exceptions.RequestException as exc:
             log.error("Versturen mislukt: %s", exc)
             return False
-    log.info("Bericht verstuurd naar %s.", chat_id)
+    log.info("Bericht verstuurd.")   # chat-id niet loggen (public repo = openbare logs)
     return True
 
 
@@ -429,8 +429,9 @@ HELP_TEKST = (
     f"{REEDS_GEBOEKT})\n"
     "/prijs JJJJ-MM-DD — prijsadvies voor één specifieke datum\n"
     "/help — deze lijst\n\n"
+    "⚡ Snel: stuur gewoon *fastlane* → direct je prijsadvies.\n"
     f"Het wekelijkse advies komt automatisch elke {VERSTUUR_DAG} om {VERSTUUR_TIJD}.\n"
-    "_(In de cloud worden commando's elke ~30 min opgehaald — even geduld.)_"
+    "_(In de cloud worden commando's elke ~5 min opgehaald.)_"
 )
 
 
@@ -470,7 +471,9 @@ def cmd_boek(st, chat_id, args):
     if co <= ci:
         send_telegram("Check-out moet ná check-in liggen.", chat_id)
         return
-    naam = " ".join(args[2:]) if len(args) > 2 else ""
+    # Privacy: deze bot draait in een PUBLIC repo, dus we bewaren GEEN gastnamen
+    # in de (gecommitte) state. Alleen datums en aantal nachten.
+    naam = ""
     nachten = (co - ci).days
 
     b = {
@@ -612,8 +615,14 @@ def verwerk_update(update: dict, st: dict) -> None:
         return
     chat_id = str(msg["chat"]["id"])
     tekst = msg["text"].strip()
+    low = tekst.lower()
+    # Trefwoord: "fastlane" -> direct het prijsadvies (geen / nodig).
+    if "fastlane" in low or "fast lane" in low:
+        cmd_advies(st, chat_id, [])
+        return
     if not tekst.startswith("/"):
-        send_telegram("Typ /help voor de commando's.", chat_id)
+        send_telegram("Typ /help voor de commando's — of stuur *fastlane* "
+                      "voor direct je prijsadvies.", chat_id)
         return
     delen = tekst.split()
     cmd = delen[0][1:].split("@")[0].lower()   # /boek@BotNaam -> boek

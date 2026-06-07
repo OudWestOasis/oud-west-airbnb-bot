@@ -21,7 +21,7 @@ airbnb-bot-cloud/
 | Onderdeel | Vroeger (lokaal) | Nu (cloud) |
 |---|---|---|
 | Wekelijks advies | `schedule` in 24/7-loop | `weekly.yml` op cron |
-| Commando's (`/boek`, `/advies`…) | `while True` long-poll | `poll.yml` elke 30 min |
+| Commando's + `fastlane` | `while True` long-poll | `poll.yml` elke 5 min |
 | State (boekingen/quota) | bestand op je pc | bestand in de repo, teruggecommit door de workflow |
 | Geheimen | in de code | **GitHub Secrets** |
 
@@ -38,10 +38,10 @@ nog naar GitHub te duwen.
 **Optie 1 — met GitHub CLI (`gh`), makkelijkst:**
 ```powershell
 cd "C:\Users\joris\Claude\Oud-West Oasis\airbnb-bot-cloud"
-gh repo create oud-west-airbnb-bot --private --source=. --remote=origin --push
+gh repo create oud-west-airbnb-bot --public --source=. --remote=origin --push
 ```
 
-**Optie 2 — handmatig:** maak op github.com een **lege, private** repo aan
+**Optie 2 — handmatig:** maak op github.com een **lege, PUBLIC** repo aan
 (naam bijv. `oud-west-airbnb-bot`, géén README aanvinken), en dan:
 ```powershell
 cd "C:\Users\joris\Claude\Oud-West Oasis\airbnb-bot-cloud"
@@ -50,9 +50,15 @@ git branch -M main
 git push -u origin main
 ```
 
-> Houd de repo **privé**: `airbnb_state.json` bevat je boekingen (namen) en je
-> chat-id verschijnt in de logs. (Een publieke repo zou wél onbeperkte gratis
-> Actions-minuten geven — zie kosten — maar dat weegt niet op tegen je privacy.)
+> **Public repo + privacy.** Public is nodig voor onbeperkte gratis minuten (de
+> 5-min-poll). Wat is daarom afgeschermd:
+> - 🔒 Token + chat-id → **GitHub Secrets** (niet in de code).
+> - 🔒 **Gastnamen** → worden **niet** opgeslagen in de gecommitte state.
+> - 🔒 Chat-id wordt **niet** in de logs geprint.
+>
+> Wel zichtbaar in `airbnb_state.json`: je quota-teller en de **datums/aantallen**
+> van boekingen (zonder namen). Vind je ook dat te veel? Maak de repo dan
+> **private** en zet in `poll.yml` de cron op `*/30` (binnen de 2000 gratis min).
 
 ---
 
@@ -78,8 +84,9 @@ Ga naar het tabblad **Actions** in je repo. Beide workflows hebben een
 
 1. **Wekelijks prijsadvies** → Run workflow → je krijgt direct het advies in
    Telegram (handmatig negeert de "alleen-maandag"-regel).
-2. **Commando's pollen** → stuur eerst in Telegram bijv. `/status`, klik dan
-   Run workflow → binnen ~30 s krijg je antwoord en wordt de state geüpdatet.
+2. **Commando's pollen** → stuur eerst in Telegram **fastlane** (of `/status`),
+   klik dan Run workflow → binnen ~30 s krijg je je prijsadvies terug en wordt
+   de state geüpdatet. Daarna gebeurt dit vanzelf elke 5 min.
 
 Zie je een ✅ groene vink? Dan draait alles. Daarna lopen de schema's vanzelf.
 
@@ -113,14 +120,10 @@ uur kunnen ze 5-15 min later starten en heel soms (bij piekdrukte) overslaan. He
 wekelijkse advies vangt dit op met twee tijdstippen + de week-controle. Bij de
 poll betekent het hooguit dat een commando iets later wordt beantwoord.
 
-**Gratis minuten (private repo = 2000 min/maand).** Elke run telt als minimaal
-1 minuut (ook al duurt hij ~30 s).
-- Poll elke 30 min ≈ 48 runs/dag ≈ **~1460 min/maand**.
-- Wekelijks advies ≈ ~10 min/maand.
-- **Totaal ≈ ~1470 / 2000 min** — ruim binnen budget.
-- Wil je sneller reageren (bijv. elke 15 min)? Dat is ~2900 min → boven de
-  limiet. Opties: bij `poll.yml` `*/30` laten staan, of upgraden, of (af te raden
-  i.v.m. privacy) de repo publiek maken voor onbeperkte minuten.
+**Gratis minuten.** Een **public** repo heeft **onbeperkte** gratis
+Actions-minuten — daarom kan de poll elke 5 min draaien (~8640 runs/maand) zonder
+kosten. (Zou je de repo private maken, dan geldt 2000 min/maand en moet de poll
+terug naar `*/30`.)
 
 **60-dagen-pauze.** GitHub zet geplande workflows uit na 60 dagen zónder
 repo-activiteit. Onze `weekly.yml` commit elke maandag de state → dat is

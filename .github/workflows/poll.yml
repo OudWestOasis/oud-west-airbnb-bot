@@ -2,10 +2,10 @@ name: Commando's pollen
 
 on:
   schedule:
-    # Elke 30 min de openstaande Telegram-commando's ophalen en verwerken.
-    # (Sub-uur cron wordt door GitHub "best effort" gedraaid; lichte vertraging
-    #  is normaal.) Kosten: ~48 runs/dag. Zie SETUP_CLOUD.md.
-    - cron: "*/30 * * * *"
+    # Elke 5 min de openstaande Telegram-commando's ophalen en verwerken.
+    # Kan GRATIS dankzij de PUBLIC repo (onbeperkte Actions-minuten).
+    # (Sub-uur cron is "best effort"; lichte vertraging is normaal.)
+    - cron: "*/5 * * * *"
   workflow_dispatch: {}   # handmatige testknop (poll nu meteen)
 
 permissions:
