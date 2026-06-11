@@ -1,5 +1,6 @@
 # Geheimen - NOOIT committen
 .env
+laptop_secrets.ps1
 
 # Logs en cache
 *.log

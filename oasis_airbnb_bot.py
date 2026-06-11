@@ -27,7 +27,7 @@ import logging
 import os
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -774,6 +774,54 @@ def run_loop() -> None:
             time.sleep(10)
 
 
+# ============================================================
+#  OVERNAME LAPTOP <-> CLOUD  (heartbeat + stand-by)
+# ============================================================
+def _laptop_actief() -> bool:
+    """True als de laptop-heartbeat vers is (< 3 min). Robuust: bij ontbreken of
+    een onleesbare waarde -> False (dan draait de cloud gewoon, dat is de basis)."""
+    hb = os.getenv("LAPTOP_HEARTBEAT", "").strip()
+    if not hb:
+        return False
+    try:
+        ts = datetime.fromisoformat(hb.replace("Z", "+00:00"))
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+    except ValueError:
+        return False
+    return (datetime.now(timezone.utc) - ts) < timedelta(minutes=3)
+
+
+def run_weekly_if_due() -> bool:
+    """Stuurt het wekelijkse advies als het maandag >= 09:00 lokaal is en deze
+    ISO-week nog niet verstuurd is. Idempotent en locatie-onafhankelijk."""
+    now = datetime.now(TIJDZONE)
+    if now.weekday() != 0 or now.hour < 9:
+        return False
+    week_id = f"{now.isocalendar().year}-W{now.isocalendar().week:02d}"
+    st = load_state()
+    if st.get("laatste_week_run") == week_id:
+        return False
+    if send_telegram(bouw_weekbericht(now.date())):
+        st["laatste_week_run"] = week_id
+        save_state(st)
+        log.info("Weekly: advies verstuurd (%s).", week_id)
+        return True
+    return False
+
+
+def run_tick() -> None:
+    """Eén ronde voor zowel laptop als cloud: commando's + wekelijkse check.
+    De CLOUD slaat de ronde volledig over als de laptop actief is (heartbeat vers);
+    de LAPTOP draait altijd. Berichten-inhoud verandert niet — alleen WIE stuurt."""
+    location = os.getenv("RUN_LOCATION", "cloud")
+    if location == "cloud" and _laptop_actief():
+        log.info("laptop actief — cloud staat stand-by (ronde overgeslagen).")
+        return
+    run_poll_once()
+    run_weekly_if_due()
+
+
 def main() -> None:
     mode = sys.argv[1].lower() if len(sys.argv) > 1 else "loop"
     _require_secrets()
@@ -781,10 +829,12 @@ def main() -> None:
         run_weekly_once()
     elif mode == "poll":
         run_poll_once()
+    elif mode == "tick":
+        run_tick()
     elif mode == "loop":
         run_loop()
     else:
-        log.error("Onbekende modus '%s'. Gebruik: weekly | poll | loop", mode)
+        log.error("Onbekende modus '%s'. Gebruik: tick | weekly | poll | loop", mode)
         raise SystemExit(2)
 
 

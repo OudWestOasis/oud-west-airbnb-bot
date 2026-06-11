@@ -32,11 +32,13 @@ jobs:
       - name: Installeer dependencies
         run: pip install -r requirements.txt
 
-      - name: Stuur wekelijks advies
+      - name: Tick (wekelijks advies + commando's; stand-by als laptop actief)
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python oasis_airbnb_bot.py weekly
+          RUN_LOCATION: cloud
+          LAPTOP_HEARTBEAT: ${{ vars.LAPTOP_HEARTBEAT }}
+        run: python oasis_airbnb_bot.py tick
 
       - name: Commit bijgewerkte state
         run: |
